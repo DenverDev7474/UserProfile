@@ -1,0 +1,18 @@
+.avatarEditorContainer {
+    position: relative;
+    display: inline-block; /* To shrink wrap the container around the image */
+}
+
+.avatarEditorContainer img:hover{
+   background-color: aqua;
+}
+
+.avatarEditButton {
+    position: absolute;
+    top: 0;
+    right: 0;
+    background: rgba(0, 0, 0, 0.5);
+    color: white;
+    border: none;
+    cursor: pointer;
+}
