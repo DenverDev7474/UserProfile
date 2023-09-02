@@ -1,67 +1,102 @@
-import { useState, useEffect, useRef } from "react";    
+/* eslint-disable react/prop-types */
+import { useState, useEffect, useRef, useCallback } from "react";    
 import axios from "axios";
 import AvatarEditor from 'react-avatar-editor';
-import "./Profile.css";
+import "./profile.css";
+
+const API_URL = "http://localhost:5000/user";
+
+const useFetchData = (url) => {
+    const [data, setData] = useState(null);
+    const [error, setError] = useState(null);
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const fetchData = async () => {
+            try {
+                const response = await axios.get(url);
+                setData(response.data);
+                setLoading(false);
+            } catch (error) {
+                setError(error);
+                console.log("You have failed to fetch data: ", error);
+            }
+        };
+        fetchData();
+    }, [url]);
+
+    return { data, loading, error } ;
+};
+
 
 
 const Profile = () => {
-    const [user, setUser] = useState({});
-    const [editingText, setEditingText] = useState(false);
-    const [editingImage, setEditingImage] = useState(false); 
-    const [showEditImageButton, setShowEditImageButton] = useState(false); 
-    const [image, setImage] = useState(null);
+    const [currentUser, setCurrentUser] = useState({})
+    const  { data: user, error, loading} = useFetchData(API_URL);   
+
+    useEffect(() => {
+        if (user) {
+            setCurrentUser(user);
+        }
+    }, [user]);
+
+    if (loading) return <p>Loading...</p>;
+    if (error) return <p>Error fetching data!</p>;
+
+    return (
+        <div>
+            <h1>Profile</h1>
+                <ProfilePicture 
+                    user={currentUser}
+                    handleUserUpdate={setCurrentUser}                
+                />
+                <hr />
+                <ProfileText 
+                    user={currentUser} 
+                    handleUserUpdate={setCurrentUser}                
+                />
+        </div>
+    );
+
+};
+
+
+
+const ProfilePicture = ( {user, handleUserUpdate} ) => {
     const [scale, setScale] = useState(1);
+    const [image, setImage] = useState(null);
+    const [editing, setEditing] = useState(false); 
+    const [showEditImageButton, setShowEditImageButton] = useState(false); 
     const avatarEditorRef = useRef();
-
-
-    const handleSave = async () => {
-        try {
-            const response = await axios.put("http://localhost:5000/user", user);
-            setUser(response.data);
-            setEditingText(false);
-        } catch (error) {
-            console.log("You have failed to save user data: ", error);
-        }   
-    };
+    const { avatar } = user;
 
     const handleImageChange = e => setImage(e.target.files[0]);
+
 
     const handleUpload = async () => {
         const canvas = avatarEditorRef.current.getImage();
         const dataURL = canvas.toDataURL();
         const updatedUser = { ...user, avatar: dataURL };
         try {
-            const response = await axios.put("http://localhost:5000/user", updatedUser);
-            setUser(response.data);
+            const response = await axios.put(API_URL, updatedUser);
+            handleUserUpdate(response.data);
         } catch (error) {
             console.log("You have failed to upload an image: ", error);
         }
     };
 
-
-    useEffect(() => {
-        async function fetchData() {
-            const result = await axios.get("http://localhost:5000/user");
-            setUser(result.data);
-        }
-        fetchData();
-    }, []);
-
-
     return (
-        <div>
-            <h1>Profile</h1>
-                <div className="profilePicture" >
-                {!editingImage ? (
-                        <div className="avatarEditorContainer">
-                            <img src={user.avatar} alt="Avatar" 
-                                onMouseOver={() => setShowEditImageButton(true)} 
-                                onMouseOut={() => setShowEditImageButton(false)} 
-                            />
+        <div className="profilePicture" >
+                {!editing ? (
+                        <div className="avatarEditorContainer" >
+                            <img src={avatar} alt="Avatar" 
+                             onMouseOver={() => setShowEditImageButton(true)} 
+                             onMouseOut={() => setShowEditImageButton(false)} 
+                             />
                             {showEditImageButton && 
                                 <button className="avatarEditButton"                             
                                     onMouseOver={() => setShowEditImageButton(true)} 
-                                    onClick={() => setEditingImage(true)}
+                                    onClick={() => setEditing(true)}
                                 >
                                 Edit
                                 </button>
@@ -71,7 +106,7 @@ const Profile = () => {
                         <div className="avatarEditor">
                             <AvatarEditor 
                                 ref={avatarEditorRef}
-                                image={image}
+                                image={image || avatar}
                                 width={250}
                                 height={250}
                                 border={50}
@@ -81,29 +116,65 @@ const Profile = () => {
                             />
                             <input type="file" onChange={handleImageChange} />
                             <input type="range" value={scale} min="1" max="3" step="0.01" onChange={e => setScale(parseFloat(e.target.value))} />
-                            <button onClick={handleUpload}>Upload Avatar</button>
-                            <button onClick={() => setEditingImage(false)}>Save</button>
+                            <button onClick={handleUpload}>Save</button>
+                            <button onClick={() => setEditing(false)}>Close</button>
                         </div>
                 )}
                 </div>
-                <div className="profileText" >
-                {!editingText ? (
-                    <>
-                        <p>Username: {user.name}</p>
-                        <p>Email: {user.email}</p>
-                    </>
-                ) : (
-                    <>
-                        <input value={user.name} onChange={(e) => setUser({ ...user, name: e.target.value })} />
-                        <input value={user.email} onChange={(e) => setUser({ ...user, email: e.target.value })} />
-                        <button onClick={handleSave}>Save</button>
-                    </>
-                )}
-                <button onClick={() => setEditingText(true)}>Edit</button>
-                </div>
+    );
+};
+
+
+const ProfileText = ({user, handleUserUpdate }) => {
+    const [editing, setEditing] = useState(false);
+    const { name, email } = user;
+
+    const handleSave = async () => {
+        try {
+            await axios.put(API_URL, user);
+            setEditing(false);
+        } catch (error) {
+            console.log("You have failed to save user data: ", error);
+        }   
+    };
+
+    const handleNameChange = useCallback((e) => {
+        handleUserUpdate({ ...user, name: e.target.value });
+    }, [handleUserUpdate, user]);
+
+    const handleEmailChange = useCallback((e) => {
+        handleUserUpdate({ ...user, email: e.target.value });
+    }, [handleUserUpdate, user]);
+
+
+
+
+    return (
+        <div className="profileText" >
+        {!editing ? (
+            <>
+                <p>Username: {name}</p>
+                <p>Email: {email}</p>
+            </>
+        ) : (
+            <>
+                <label> 
+                    Username:
+                    <input value={name} onChange={handleNameChange} />
+                </label>
+                <label>
+                    Email:
+                    <input value={email} onChange={handleEmailChange} />
+                </label>
+                <button onClick={handleSave}>Save</button>
+            </>
+        )}
+         {!editing &&
+        <button onClick={() => setEditing(!editing)}>Edit</button>
+         }
         </div>
     );
-
 };
+
 
 export default Profile;
